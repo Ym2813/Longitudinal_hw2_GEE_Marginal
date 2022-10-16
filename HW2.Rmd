@@ -1,0 +1,28 @@
+---
+title: "p8157_hw2"
+author: "Anna Ma"
+date: "2022-10-16"
+output: html_document
+---
+
+#### Question 1
+
+##### 1
+
+##### 2
+
+##### 3
+
+##### 4
+
+
+
+#### Question 2
+
+##### 1
+
+##### 2
+
+##### 3
+
+##### 4
