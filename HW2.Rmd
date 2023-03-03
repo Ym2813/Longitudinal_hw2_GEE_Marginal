@@ -2,27 +2,340 @@
 title: "p8157_hw2"
 author: "Anna Ma"
 date: "2022-10-16"
-output: html_document
+output: pdf_document
 ---
 
-#### Question 1
 
-##### 1
+```{r setup, include=FALSE}
+library(tidyverse)
+library(data.table)
+library(geepack)
+library(doBy)
+```
 
-##### 2
-
-##### 3
-
-##### 4
+## Question 1 \ 
 
 
+Randomized, double-blind, parallel-group, multicenter study comparing two oral treatments (denoted
+A and B) for toe-nail infection, patients were
+evaluated for the degree of onycholysis (the degree of separation of the nail plate from the nail-bed) at baseline (week 0) and at weeks 4, 8, 12, 24, 36, and 48 thereafter. The onycholysis outcome variable is binary (none or mild versus moderate or severe). The binary outcome was evaluated on 294 patients comprising a total of 1908 measurements. 
 
-#### Question 2
+The main objective of the analyses is to compare the effects of oral treatments A and B on changes in the probability of the binary onycholysis outcome over the duration of the study. 
 
-##### 1
+* The *binary onycholysis outcome variable Y* is coded 0 = none or mild, 1 = moderate or severe.
 
-##### 2
+* The categorical variable Treatment is coded 1=oral treatment A, 0=oral treatment B.
 
-##### 3
+* The variable Month denotes the exact timing of measurements in months.
 
-##### 4
+* The variable Visit denotes the visit number (visit numbers 1-7 correspond to scheduled visits at 0, 4, 8, 12, 24, 36, and 48 weeks).
+
+```{r Q1 data import, message = FALSE}
+toenail_df = read_delim(file = "toenail.txt", delim = " ", col_names = c("id", "response", "treatment", "month", "visit"), skip = 1)
+```
+
+##### 1. Consider a marginal model for the log odds of moderate or severe onycholysis. Using GEE, set up a suitable model assuming linear trends. Use month as the time variable. Assume “exchangeable” correlation for the association among the repeated binary responses.
+
+
+* Model setup: $\mu_{ij} = E[Y_{ij}] = E[Y_{ij}|X_{ij}]$
+
+* Link function: logit link function: $log(\frac{\mu_{ij}}{1-\mu{ij}}) =\eta_{ij}= \sum_{k=1}^p X_{ij}\beta_{k}$
+
+* Under binomial assumption: $Var(Y_{ij}) = \phi v(\mu_{ij}) = \mu_{ij}(1-\mu_{ij})$ 
+
+* correlation structure: exchangeable
+
+The model can be written as: 
+$$
+\eta_{ij}= \beta_{0} + \beta_{1}month_{ij}+\beta_{2}treatment_{i}+\beta_{3}(month_{ij} * treatment_{i})\\
+$$
+
+```{r}
+gee1 = geeglm(response ~ month * treatment, data = toenail_df, id = id, family = binomial(link = "logit"), corstr = "exchangeable")
+summary(gee1)
+```
+
+Test whether the month and treatment interaction is needed: $H_{0}: \beta_{3} = 0$
+
+```{r}
+L = matrix(0, ncol = 4, nrow = 1) #ncol = number of coefficients in the model, nrow = number of tests
+L[1,4] = 1
+esticon(gee1,L=L,joint.test = FALSE)
+```
+
+Since the p-value = 0.1509 > 0.05, therefore, at significance level at $\alpha = 0.05$, we fail to reject the null hypothesis and conclude that the interaction term can be removed. After removing the interaction, we have the model as follows: 
+$$
+\eta_{ij}= \beta_{0} + \beta_{1}month_{ij}+\beta_{2}treatment_{i}\\
+$$
+
+```{r}
+gee2 = geeglm(response ~ month + treatment, data = toenail_df, id = id, family = binomial(link = "logit"), corstr = "exchangeable")
+summary(gee2)
+```
+
+##### 2. Provide Interpretations for the coefficients in your model.
+
+```{r}
+summary(gee2)$coefficients %>% knitr::kable()
+```
+
+The estimate by the GEE is shown as above. Plug the estimate into our model, than we have 
+$$
+\eta_{ij}= -0.6104 -0.2051*month_{ij}+ 0.0402*treatment_{i}\\
+$$
+
+From this model, we can interpret the estimates as follows: \ 
+
+* The log odds of moderate or severe onycholysis for oral treatment B at baseline is -0.610, that is, at baseline, patients taking oral treatment B are `r exp(gee2$coefficients[1])` times more likely to develop a moderate or severe onycholysis. 
+
+* The log odds ratio of moderate or severe onycholysis for 1 unit increase in month among treatment B is -0.2051. That is, for every 1 unit increase in month, patients taking oral treatment B are `r exp(gee2$coefficients[2])` times more likely to develop a moderate or severe onycholysis. 
+
+* The log odds ratio of moderate or severe onycholysis comparing treatment A to treatment B holding month constant is 0.0402. That is, in a fixed month, patients taking oral treatment A are `r exp(gee2$coefficients[3])` times more likely to develop a moderate or severe onycholysis. 
+
+* Combining the result above and the fact that the treatment covariate had a p-value greater than 0.05, we can conclude that treatment is insignificant in the development of onycholysis status. 
+
+
+##### 3. From the results of your analysis what conclusions do you draw about the effect of treatment on changes in the severity of onycholysis over time? Provide results that support your conclusions.
+
+```{r}
+esticon(gee1,L=L,joint.test = FALSE)
+```
+
+In the first part of the question, we conducted a hypothesis test regarding the significance of the interaction term of treatment and month. From our test result shown above, we can see that the p-value = 0.1509 > 0.05, therefore, at significance level at $\alpha = 0.05$, we fail to reject the null hypothesis and conclude that the coefficient for the interaction term is 0. This means that **the effect of the treatment does not change over time**. 
+
+##### 4. Try Different correlation structures. Is the analysis and inference sensitive to this choice? \ 
+
+
+**Unstructured Correlation**
+
+```{r}
+gee3 = geeglm(response ~ month * treatment, data = toenail_df, id = id, family = binomial(link = "logit"), corstr = "unstructured")
+summary(gee3)
+```
+
+Test for interaction term:
+```{r}
+esticon(gee3,L=L,joint.test = FALSE)
+```
+
+Since the p-value = 0.063 > 0.05, we fail to reject the null hypothesis and conclude that the coefficient for the interaction term is 0 and can be removed from the model. Therefore, the inference of parameters are not sensitive to this choice.
+
+```{r}
+gee3_1 = geeglm(response ~ month + treatment, data = toenail_df, id = id, family = binomial(link = "logit"), corstr = "unstructured")
+summary(gee3_1)
+```
+
+
+**AR(1)**
+```{r}
+gee4 = geeglm(response ~ month * treatment, data = toenail_df, id = id, family = binomial(link = "logit"), corstr = "ar1")
+summary(gee4)
+```
+
+Test for interaction term:
+```{r}
+esticon(gee4,L=L,joint.test = FALSE)
+```
+Since the p-value = 0.061 > 0.05, we fail to reject the null hypothesis and conclude that the coefficient for the interaction term is 0 and can be removed from the model. Therefore, the inference of parameters are not sensitive to this choice.
+
+Removing interaction term:
+```{r}
+gee4_1 = geeglm(response ~ month + treatment, data = toenail_df, id = id, family = binomial(link = "logit"), corstr = "ar1")
+summary(gee4_1)
+```
+
+* Scale parameter: In the three correlation structures, the scale parameter $\phi$ is estimated to be: **Exchangeable: `r round(summary(gee1)$dispersion[1],3)`**, **Unstructured: `r round(summary(gee3)$dispersion[1],3)`**, **AR(1): `r round(summary(gee4)$dispersion[1],3)`**. All of those are close to 1, which is in line with our assumption of using the logit link function. 
+
+* Estimates: 
+
+1) Exchangeable
+`r summary(gee2)$coefficient %>% knitr::kable()`
+
+2) Unstructured
+`r summary(gee3_1)$coefficient %>% knitr::kable()`
+
+3) AR(1)
+`r summary(gee4_1)$coefficient %>% knitr::kable()`
+
+From the table we can see that the estimated coefficients, especially coefficient for treatment does change depending on the correlation structure we choose. However, the coefficient of treatment has a p-value greater than 0.05 in all three models, indicating that the treatment is not significant. Therefore, we can say that the significant variables of **insensitive** to the choice of correlation structure.
+
+
+
+## Question 2
+
+The Skin Cancer Prevention Study was a randomized, double-blind, placebo-controlled clinical trial of beta carotene to prevent non-melanoma skin cancer in high-risk subjects.A total of 1805 subjects were randomized to either placebo or 50 mg of beta carotene per day for 5 years. 
+
+The main objective of the analyses is to compare the effects of beta carotene on skin
+cancer rates. 
+
+* The outcome variable Y is a count of the of the number of new skin cancers per year. 
+* The categorical variable Treatment is coded 1=beta carotene, 0=placebo. 
+* The variable Year denotes the year of follow-up. 
+* The categorical variable Gender is coded 1 male, 0 female. 
+* The categorical variable Skin denotes skin type and is coded 1 = burns, 0 otherwise. 
+* The variable Exposure is a count of the number of previous skin cancers.
+* The variable Age is the age (in years) of each subject at randomization.
+
+```{r Q2 data import,message = FALSE}
+skin_df = read.table(file = "skin.txt", header = FALSE,col.names = c("id", "center", "age", "skin", "gender", "exposure", "y", "treatment", "year"), skip = 3)
+```
+
+##### 1. Set up a suitable GEE model for rate of skin cancers with Treatment and Year as covariates.
+
+* Model set up $\mu_{ij} = E[Y_{ij}]$
+* Under poisson assumption: 
+  * Link function: $log(\mu_{ij}) =\eta_{ij}= \sum_{k=1}^p X_{ij}\beta_{k}$
+  * $V(\mu_{ij})= \mu_{ij}$
+* correlation structure: unstructured
+
+The model can be written as: 
+$$
+\eta_{ij} = \beta_{0} + \beta_{1}treatment_{i} + \beta_{2}year_{ij} + \beta_{3}treatment_{i} * year_{ij}
+$$
+
+```{r}
+q2_gee1 = geeglm(y ~ treatment*year, data = skin_df, family = "poisson"(link = "log"), id = id, corstr = "exchangeable")
+summary(q2_gee1)
+```
+
+Again, we will test if the interaction term is required:
+$H_0: \beta_{3} = 0$
+
+```{r}
+L_q2 = matrix(0, ncol = 4, nrow = 1) 
+L_q2[1,4] = 1
+esticon(q2_gee1, L = L_q2, joint.test = FALSE)
+```
+
+Since p-value = `r round(esticon(q2_gee1, L = L_q2, joint.test = FALSE)$p.value,3)`, which is greater than the significance level 0.05, we fail to reject the null and conclude that the coefficient for the interaction term is 0 and thus can be removed from our model.That is, the model will be written as follows:
+
+$$
+\eta_{ij}= \beta_{0} + \beta_{1}treatment_{i} + \beta_{2}year_{ij}
+$$
+
+The new model without the interaction term will be fitted as:
+
+```{r}
+q2_gee2 = geeglm(y ~ treatment+year, data = skin_df, family = "poisson"(link = "log"), id = id, corstr = "exchangeable")
+summary(q2_gee2)
+```
+
+##### 2. Provide Interpretations for the coefficients in your model.
+
+```{r}
+summary(q2_gee2)$coefficients %>% knitr::kable()
+```
+
+From the estimate, we can see that the p-value for all the covariates are larger than 0.05, indicating that the covariates are insignificant. However, if we were still to interpret the result, we can say that:
+
+* The log rate of having non-melanoma skin cancers in placebo group at baseline is `r round(summary(q2_gee2)$coefficients[1,1],3)`.That is, the rate of having skin cancer in the placebo group at baseline is `r round(exp(summary(q2_gee2)$coefficients[1,1]),3)`
+* The log rate ratio of having non-melanoma skin cancer between treatment group and placebo group holding year constant is `r round(summary(q2_gee2)$coefficients[2,1],3)`. That is, the rate of having skin cancer for the treatment group is `r round(exp(summary(q2_gee2)$coefficients[2,1]),3)` times that of the placebo group, holding follow up years constant. 
+* The log rate ratio of having non-melanoma skin cancer with one unit increase in years of follow-up for the placebo group is `r round(summary(q2_gee2)$coefficients[3,1],3)`. That is, the rate of having skin cancer for the placebo group is `r round(exp(summary(q2_gee2)$coefficients[3,1]),3)` times that of the treatment group with every unit increase in follow up year. 
+
+Based on these results, the treatment group had higher rate of having new skin cancer compared to the placebo group when followup years are the same and the two group's rate ratio is close to one with prolonged increasing follow-up year. Therefore, it appears that beta-carotene is not effective in reducing skin cancer rates.
+
+
+##### 3. From the results of your analysis what conclusions do you draw about the effect of beta carotene on the rate of skin cancers? Provide results that support your conclusions.
+
+```{r}
+esticon(q2_gee1,L=L_q2,joint.test = FALSE)
+```
+
+In the first part of the question, we conducted a hypothesis test regarding the significance of the interaction term of treatment and month. From our test result shown above, we can see that the p-value = `r round(esticon(q2_gee1, L = L_q2, joint.test = FALSE)$p.value,3)` > 0.05, therefore, at significance level at $\alpha = 0.05$, we fail to reject the null hypothesis and conclude that the coefficient for the interaction term is 0. This means that **the effect of the treatment does not change over time.**
+
+##### 4. Repeat the above analysis adjusting for skin type, age, and the count of the number of previous skincancers. What conclusions do you draw about the effect of beta carotene on the adjusted rate of skin cancers?\  
+
+
+**1) Model fitting**
+
+With adjusting for skin type, age, and the count of the number of previous skincancers, the fitted model can be written as:
+$$
+\eta_{ij}= \beta_{0} + \beta_{1}treatment + \beta_{2}year + \beta_{3}age + \beta_{4}skin_{1}+ \beta_{5}exposure
+$$
+
+```{r}
+q2_gee3 = geeglm(y ~ treatment + year + age + skin + exposure, data = skin_df, family = "poisson"(link = "log"), id = id, corstr = "exchangeable")
+summary(q2_gee3)
+```
+
+**2) Test for beta carotene efficacy**\ 
+
+
+To test for the efficacy of beta carotene, we set the null hypothesis to be such that $H_0: \beta_{1} = 0$
+
+```{r}
+L_q2_2 = matrix(0, ncol = 6, nrow = 1) 
+L_q2_2[1,2] = 1
+esticon(q2_gee3, L = L_q2_2, joint.test = FALSE)
+```
+
+From the test result, we can see that the p-value = `r round(esticon(q2_gee3, L = L_q2_2, joint.test = FALSE)$p.value,3)`, which is greater than the significant level 0.05. Thus, we fail to reject the null hypothesis and conclude that the coefficient for treatment is 0. That is, the effect of beta carotene on skin cancer is insignificant. Instead, age and the count of the number of previous skin cancers do significantly effect the outcome on the rate of skin cancers however, with respective p-values of 0.0044 and <2e-16.
+
+
+##### 5. Try Different correlation structures. Is the analysis and inference sensitive to this choice?\ 
+
+**Unstructured**
+
+```{r}
+q2_gee4 = geeglm(y ~ treatment + year + age + skin + exposure, data = skin_df, family = "poisson"(link = "log"), id = id, corstr = "unstructured")
+summary(q2_gee4)
+```
+
+
+**AR(1)**
+```{r}
+q2_gee5 = geeglm(y ~ treatment + year + age + skin + exposure, data = skin_df, family = "poisson"(link = "log"), id = id, corstr = "ar1")
+summary(q2_gee5)
+```
+
+* Scale parameter: In the three correlation structures, the scale parameter $\phi$ is estimated to be: **Exchangeable: `r round(summary(q2_gee3)$dispersion[1],3)`**, **Unstructured: `r round(summary(q2_gee4)$dispersion[1],3)`**, **AR(1): `r round(summary(q2_gee5)$dispersion[1],3)`**. All of the three correlation structure had the identical estimation for the scale parameter. 
+
+* Estimates: 
+
+1) Exchangeable
+`r summary(q2_gee3)$coefficient %>% knitr::kable()`
+
+2) Unstructured
+`r summary(q2_gee4)$coefficient %>% knitr::kable()`
+
+3) AR(1)
+`r summary(q2_gee5)$coefficient %>% knitr::kable()`
+
+From the table we can see that the estimated coefficients changes only slightly depending on the correlation structure we choose. Also, all of the three models had the same insignificant covariates. In all three models, treatment, year, and skin had p-values greater than 0.05, indicating that they are not significant in impacting the response y. On the other hand, age and the count of the number of previous skin cancers are covariates that identified by all three models to be factors that have significantly effect the outcome on the rate of skin cancers. Based on those results, we can say that the significant variables of *insensitive* to the choice of correlation structure.
+
+
+##### 6. Do you need to account for overdisperion. Comment.
+
+In part one, when we only included treatment and year as covariates with unstructured correlation, the scale parameter is estimated to be `r round(summary(q2_gee2)$dispersion,3)`. In part 4) and 5), we added skin type, age, and the count of the number of previous skin
+cancers in the model and tested different correlation structures. All three model gave the same scale parameter, $\phi$ is estimated to be: Unstructured: `r round(summary(q2_gee4)$dispersion[1],3)`,Exchangeable: `r round(summary(q2_gee3)$dispersion[1],3)`, AR(1): `r round(summary(q2_gee5)$dispersion[1],3)`. In all cases, $\phi$ is greater than 1, which is the value we should have under our poisson assumption. This indicates that there may be overdispersion, and **we should account for overdispersion** when fitting the model. Similar conclusion cna be obtained from the dispersion tests below:
+
+$H_0: \phi = 1$, $H_a: \phi >1$
+
+```{r, message = FALSE}
+library(AER)
+```
+
+1). For part 1 model with only treatment and year:
+```{r}
+dispersiontest(q2_gee2)
+```
+
+2). For part 4 model with covariates treatment, year, skin type, age, and the count of the number of previous skin cancers:
+
+```{r}
+dispersiontest(q2_gee3)
+```
+
+3) For part 5 model with different correlation structure:
+
+* unstructured
+```{r}
+dispersiontest(q2_gee4)
+```
+
+* AR(1)
+```{r}
+dispersiontest(q2_gee5)
+```
+
+All three test showed p-value less than 0.05, we therefore reject the null hypothesis and conclude that there's no statistically significant evidence to show that the scale parameter is 1 in all those models, indicating that **overdispersion needs to be accounted for**. 
